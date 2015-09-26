@@ -1,5 +1,11 @@
 /* (c) 2015 Open Garages */
 
+/* Helper Macros */
+#define SET_BIT(val, bitIndex) val |= (1 << bitIndex)
+#define CLEAR_BIT(val, bitIndex) val &= ~(1 << bitIndex)
+#define TOGGLE_BIT(val, bitIndex) val ^= (1 << bitIndex)
+#define IS_SET(val, bitIndex) (val & (1 << bitIndex))
+
 /* OBD-II Modes */
 #define OBD_MODE_SHOW_CURRENT_DATA        0x01
 #define OBD_MODE_SHOW_FREEZE_FRAME        0x02
@@ -59,4 +65,7 @@
 #define DTC_TEST_NOT_PASSED_SINCE_POWER   32
 #define DTC_CURRENT_DTC_SINCE_POWER       64
 #define DTC_WARNING_INDICATOR_STATE       128
+
+/* Periodic Data Message types */
+#define PENDING_READ_DATA_BY_ID_GM         1
 

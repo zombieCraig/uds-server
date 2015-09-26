@@ -38,6 +38,10 @@ int fuzz_level = 0;
 int keep_spec = 0;
 FILE *plogfp = NULL;
 char *vin = VIN;
+struct timeval start_tv;
+int pending_data;
+struct can_frame gm_data_by_id;
+long gm_lastcms = 0;
 
 /* This is for flow control packets */
 char gBuffer[255];
@@ -208,6 +212,74 @@ void isotp_send(int can, char *data, int size) {
   isotp_send_to(can, data, size, 0x7e8);
 }
 
+/*
+ * Some UDS queries requiest periodic data.  This handles those
+ */
+void handle_pending_data(int can) {
+  struct canfd_frame frame;
+  struct timeval tv;
+  long currcms;
+  int i, offset, datacnt;
+  if(!pending_data) return;
+
+  gettimeofday(&tv, NULL);
+  currcms = (tv.tv_sec - start_tv.tv_sec) * 100 + (tv.tv_usec / 10000);
+
+  if(IS_SET(pending_data, PENDING_READ_DATA_BY_ID_GM)) {
+        if(gm_data_by_id.data[0] == 0xFE) {
+          offset = 1;
+        } else {
+          offset = 0;
+        }
+        frame.can_id = gm_data_by_id.can_id;
+        frame.len = 8;
+        switch(gm_data_by_id.data[2 + offset]) { // Subfunctions
+          case 0x02:  // Slow Rate
+            if (currcms - gm_lastcms > 1000) {
+              for(i=3; i < gm_data_by_id.data[0]+1; i++) {
+                frame.data[0] = gm_data_by_id.data[i];
+                for(datacnt=1; datacnt < 8; datacnt++) {
+                  frame.data[datacnt] = rand() % 255;
+                }
+                write(can, &frame, CAN_MTU);
+                if(verbose > 1) plog("  + Sending GM data (%02X) at a slow rate\n", frame.data[0]);
+              }
+              gm_lastcms = currcms;
+            }
+            break;
+          case 0x03:  // Medium Rate
+            if (currcms - gm_lastcms > 100) {
+              for(i=3; i < gm_data_by_id.data[0]+1; i++) {
+                frame.data[0] = gm_data_by_id.data[i];
+                for(datacnt=1; datacnt < 8; datacnt++) {
+                  frame.data[datacnt] = rand() % 255;
+                }
+                write(can, &frame, CAN_MTU);
+                if(verbose > 1) plog("  + Sending GM data (%02X) at a medium rate\n", frame.data[0]);
+              }
+              gm_lastcms = currcms;
+            }
+            break;
+          case 0x04:  // Fast Rate
+            if (currcms - gm_lastcms > 20) {
+              for(i=3; i < gm_data_by_id.data[0]+1; i++) {
+                frame.data[0] = gm_data_by_id.data[i];
+                for(datacnt=1; datacnt < 8; datacnt++) {
+                  frame.data[datacnt] = rand() % 255;
+                }
+                write(can, &frame, CAN_MTU);
+                if(verbose > 1) plog("  + Sending GM data (%02X) at a fast rate\n", frame.data[0]);
+              }
+              gm_lastcms = currcms;
+            }
+            break;
+          default:
+            plog("Unknown subfunction timer\n");
+            break;
+        }
+  } // IS_SET PENDING_READ_DATA_BY_ID_GM
+}
+
 void send_dtcs(int can, char total, struct canfd_frame frame) {
   char resp[1024];
   char i;
@@ -310,7 +382,7 @@ void send_error_roor(int can, struct canfd_frame frame, int id) {
 
 void generic_OK_resp(int can, struct canfd_frame frame) {
   char resp[4];
-  if(verbose) plog("Responding with a generic OK message\n");
+  if(verbose > 1) plog("Responding with a generic OK message\n");
   resp[0] = frame.data[1] + 0x40;
   resp[1] = frame.data[2];
   resp[2] = 0;
@@ -319,7 +391,7 @@ void generic_OK_resp(int can, struct canfd_frame frame) {
 
 void generic_OK_resp_to(int can, struct canfd_frame frame, int id) {
   char resp[4];
-  if(verbose) plog("Responding with a generic OK message\n");
+  if(verbose > 1) plog("Responding with a generic OK message\n");
   resp[0] = frame.data[1] + 0x40;
   resp[1] = frame.data[2];
   resp[2] = 0;
@@ -699,6 +771,7 @@ void handle_gm_read_did_by_id(int can, struct canfd_frame frame) {
   char *buf;
   char *tracenum = "874602RA51950204";
   unsigned char chksum;
+  int pktsize;
   switch(frame.data[2]) {
     case 0x90:  // VIN
       if(verbose) plog(" + Requested VIN\n");
@@ -722,12 +795,51 @@ void handle_gm_read_did_by_id(int can, struct canfd_frame frame) {
           free(buf);
           isotp_send_to(can, resp, 3 + 17, 0x644);
           break;
+        case 2:
+        case 3:  // At 3 the ISOTP spec gets flaky
+          pktsize = rand() % 252;
+          if(verbose) plog("Fuzzing big VIN with printable chars\n");
+          resp[0] = frame.data[1] + 0x40;
+          resp[1] = frame.data[2];
+          buf = gen_data(DATA_ALPHANUM, pktsize);
+          chksum = calc_vin_checksum(buf, pktsize);
+          buf[8] = chksum;
+          if(verbose) plog("Using big VIN (%d chars): %s\n",pktsize, buf);
+          memcpy(&resp[2], buf, pktsize);
+          free(buf);
+          isotp_send_to(can, resp, 3 + pktsize, 0x644);
+          break;
+        case 4:
+          if(verbose) plog("Fuzzing VIN with binary data\n");
+          resp[0] = frame.data[1] + 0x40;
+          resp[1] = frame.data[2];
+          buf = gen_data(DATA_BINARY, 17);
+          chksum = calc_vin_checksum(buf, 17);
+          buf[8] = chksum;
+          if(verbose) print_bin(buf, 17);
+          memcpy(&resp[2], buf, 17);
+          free(buf);
+          isotp_send_to(can, resp, 3 + 17, 0x644);
+          break;
+        case 5:
+        default:
+          pktsize = rand() % 252;
+          if(verbose) plog("Fuzzing VIN with binary data with size %d\n", pktsize);
+          resp[0] = frame.data[1] + 0x40;
+          resp[1] = frame.data[2];
+          buf = gen_data(DATA_BINARY, pktsize);
+          if(verbose) print_bin(buf, pktsize);
+          memcpy(&resp[2], buf, pktsize);
+          free(buf);
+          isotp_send_to(can, resp, 3 + pktsize, 0x644);
+          break;
        }
       break;
     case 0xA1:  // SDM Primary Key
       if(verbose) plog(" + Requested SDM Primary Key\n");
       switch(fuzz_level) {
         case 0:
+        default:
           if(verbose) plog("Sending SDM Key %04X\n", 0x6966);
           resp[0] = frame.data[1] + 0x40;
           resp[1] = frame.data[2];
@@ -741,6 +853,7 @@ void handle_gm_read_did_by_id(int can, struct canfd_frame frame) {
       if(verbose) plog(" + Requested Traceability Number\n");
       switch(fuzz_level) {
         case 0:
+        default:
           if(verbose) plog("Sending Traceabiliity number %s\n", tracenum);
           resp[0] = frame.data[1] + 0x40;
           resp[1] = frame.data[2];
@@ -753,6 +866,7 @@ void handle_gm_read_did_by_id(int can, struct canfd_frame frame) {
       if(verbose) plog(" + Requested Software Number\n");
       switch(fuzz_level) {
         case 0:
+        default:
           if(verbose) plog("Sending SW # %d\n", 600);
           resp[0] = frame.data[1] + 0x40;
           resp[1] = frame.data[2];
@@ -769,6 +883,7 @@ void handle_gm_read_did_by_id(int can, struct canfd_frame frame) {
       if(verbose) plog(" + Requested End Model Part Number\n");
       switch(fuzz_level) {
         case 0:
+        default:
           if(verbose) plog("Sending End Model Part Number %d\n", 15804602);
           resp[0] = frame.data[1] + 0x40;
           resp[1] = frame.data[2];
@@ -789,7 +904,6 @@ void handle_gm_read_did_by_id(int can, struct canfd_frame frame) {
 /* 244   [5]  04 AA 03 02 07 */
 /* 544#0738408D8B000200 */
 /* 544#02508D8D00000000 */
-/* TODO: Once a real queue is built add these request to those timers */
 void handle_gm_read_data_by_id(int can, struct canfd_frame frame) {
   if(verbose) plog("Received GM Read Data by ID Request\n");
   int offset = 0;
@@ -809,6 +923,7 @@ void handle_gm_read_data_by_id(int can, struct canfd_frame frame) {
       if(verbose) plog(" + Stop Data Request\n");
       memset(frame.data, 0, 8);
       write(can, &frame, CAN_MTU);
+      CLEAR_BIT(pending_data, PENDING_READ_DATA_BY_ID_GM);
       break;
     case 0x01:  // One Response
       if(verbose) plog(" + One Response\n");
@@ -823,36 +938,18 @@ void handle_gm_read_data_by_id(int can, struct canfd_frame frame) {
       break;
     case 0x02:  // Slow Rate
       if(verbose) plog(" + Slow Rate\n");
-      if(verbose) plog(" + Medium Rate\n");
-      for(i=3; i < datacpy[0]+1; i++) {
-        frame.data[0] = datacpy[i];
-        for(datacnt=1; datacnt < 8; datacnt++) {
-          frame.data[datacnt] = rand() % 255;
-        }
-        write(can, &frame, CAN_MTU);
-        sleep(1);
-      }
+      SET_BIT(pending_data, PENDING_READ_DATA_BY_ID_GM);
+      memcpy(&gm_data_by_id, &frame, sizeof(frame));
       break;
     case 0x03:  // Medium Rate
       if(verbose) plog(" + Medium Rate\n");
-      for(i=3; i < datacpy[0]+1; i++) {
-        frame.data[0] = datacpy[i];
-        for(datacnt=1; datacnt < 8; datacnt++) {
-          frame.data[datacnt] = rand() % 255;
-        }
-        write(can, &frame, CAN_MTU);
-        sleep(0.7);
-      }
+      SET_BIT(pending_data, PENDING_READ_DATA_BY_ID_GM);
+      memcpy(&gm_data_by_id, &frame, sizeof(frame));
       break;
     case 0x04:  // Fast Rate
       if(verbose) plog(" + Fast Rate\n");
-      for(i=3; i < datacpy[0]+1; i++) {
-        frame.data[0] = datacpy[i];
-        for(datacnt=1; datacnt < 8; datacnt++) {
-          frame.data[datacnt] = rand() % 255;
-        }
-        sleep(0.3);
-      }
+      SET_BIT(pending_data, PENDING_READ_DATA_BY_ID_GM);
+      memcpy(&gm_data_by_id, &frame, sizeof(frame));
       break;
     default:
       plog("Unknown subfunction timer\n");
@@ -1190,11 +1287,12 @@ void print_bin(unsigned char *bin, int size) {
 // given where that info came from.  There could be a lot of overlap
 // and exceptions here. -- Craig
 void handle_pkt(int can, struct canfd_frame frame) {
-  print_pkt(frame);
+  if(DEBUG) print_pkt(frame);
   switch(frame.can_id) {
     case 0x243: // EBCM / GM / Chevy Malibu 2006
       switch(frame.data[1]) {
         case UDS_SID_TESTER_PRESENT:
+          if(verbose > 1) plog("Received TesterPresent\n");
           generic_OK_resp_to(can, frame, 0x643);
           break;
         case UDS_SID_GM_READ_DIAG_INFO:
@@ -1202,7 +1300,7 @@ void handle_pkt(int can, struct canfd_frame frame) {
           break;
         
         default:
-          //if(verbose) plog("Unhandled mode/sid: %02X\n", frame.data[1]);
+          if(verbose) print_pkt(frame);
           if(verbose) plog("Unhandled mode/sid: %s\n", get_mode_str(frame));
           break;
       }
@@ -1214,6 +1312,7 @@ void handle_pkt(int can, struct canfd_frame frame) {
       }
       switch(frame.data[1]) {
         case UDS_SID_TESTER_PRESENT:
+          if(verbose > 1) plog("Received TesterPresent\n");
           generic_OK_resp_to(can, frame, 0x644);
           break;
         case UDS_SID_GM_READ_DIAG_INFO:
@@ -1226,7 +1325,7 @@ void handle_pkt(int can, struct canfd_frame frame) {
           handle_gm_read_did_by_id(can, frame);
           break;
         default:
-          //if(verbose) plog("Unhandled mode/sid: %02X\n", frame.data[1]);
+          if(verbose) print_pkt(frame);
           if(verbose) plog("Unhandled mode/sid: %s\n", get_mode_str(frame));
           break;
       }
@@ -1234,7 +1333,7 @@ void handle_pkt(int can, struct canfd_frame frame) {
     case 0x24A: // Power Steering / GM / Chevy Malibu 2006
       switch(frame.data[1]) {
         default:
-          //if(verbose) plog("Unhandled mode/sid: %02X\n", frame.data[1]);
+          if(verbose) print_pkt(frame);
           if(verbose) plog("Unhandled mode/sid: %s\n", get_mode_str(frame));
           break;
       }
@@ -1245,10 +1344,12 @@ void handle_pkt(int can, struct canfd_frame frame) {
       }
       break;
     case 0x710: // VCDS
+      if(verbose) print_pkt(frame);
       handle_vcds_710(can, frame);
       break;
     case 0x7df:
     case 0x7e0:  // Sometimes flow control comes here
+      if(verbose) print_pkt(frame);
       if(frame.data[0] == 0x30 && gBufLengthRemaining > 0) flow_control_push(can);
       if(frame.data[0] == 0 || frame.len == 0) return;
       if(frame.data[0] > frame.len) return;
@@ -1278,6 +1379,7 @@ void handle_pkt(int can, struct canfd_frame frame) {
           handle_read_data_by_id(can, frame);
           break;
         case UDS_SID_TESTER_PRESENT:
+          if(verbose > 1) plog("Received TesterPresent\n");
           generic_OK_resp(can, frame);
           break;
         case UDS_SID_GM_READ_DIAG_INFO:
@@ -1290,13 +1392,14 @@ void handle_pkt(int can, struct canfd_frame frame) {
       }
       break;
     default:
+      if (DEBUG) print_pkt(frame);
       if (DEBUG) plog("DEBUG: missed ID %02X\n", frame.can_id);
       break;
   }
 }
 
 int main(int argc, char *argv[]) {
-  int opt;
+  int opt, ret;
   int can;
   int nbytes;
   struct ifreq ifr;
@@ -1306,6 +1409,8 @@ int main(int argc, char *argv[]) {
   struct canfd_frame frame;
   char ctrlmsg[CMSG_SPACE(sizeof(struct timeval)) + CMSG_SPACE(sizeof(__u32))];
   struct sigaction act;
+  struct timeval timeo;
+  fd_set rdfs;
 
   verbose = 0;
   act.sa_handler = intHandler;
@@ -1319,7 +1424,7 @@ int main(int argc, char *argv[]) {
           keep_spec = 1;
           break;
         case 'v':
-          verbose = 1;
+          verbose++;
           break;
         case 'V':
           vin = optarg;
@@ -1373,18 +1478,34 @@ int main(int argc, char *argv[]) {
   msg.msg_flags = 0;
 
   if(verbose) plog("Fuzz level set to: %d\n", fuzz_level);
+  gettimeofday(&start_tv, NULL);
   running = 1;
   while(running) {
-    nbytes = recvmsg(can, &msg, 0);
-    if (nbytes < 0) {
-      perror("read");
-      return 1;
+    FD_ZERO(&rdfs);
+    FD_SET(can, &rdfs);
+  
+    timeo.tv_sec  = 0;
+    timeo.tv_usec = 10000 * 20; // 20 ms  
+
+    if ((ret = select(can+1, &rdfs, NULL, NULL, &timeo)) < 0) {
+      running = 0;
+      continue;
     }
-    if ((size_t)nbytes != CAN_MTU) {
-      fprintf(stderr, "read: incomplete CAN frame\n");
-      return 1;
+
+    if (FD_ISSET(can, &rdfs)) {
+      nbytes = recvmsg(can, &msg, 0);
+      if (nbytes < 0) {
+        perror("read");
+        return 1;
+      }
+      if ((size_t)nbytes != CAN_MTU) {
+        fprintf(stderr, "read: incomplete CAN frame\n");
+        return 1;
+      }
+      handle_pkt(can, frame);
     }
-    handle_pkt(can, frame);
+
+    handle_pending_data(can);
   }
 
   plog("Got Interrupt.  Shutting down gracefully\n");
