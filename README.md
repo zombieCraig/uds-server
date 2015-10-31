@@ -7,8 +7,8 @@ for training.
 
 Running both ICSim and uds-server can give students a more realistic use of tools.  You can use
 ICSim to understand the basics of reversing CAN and uds-server to dig into the UDS protocol
-and ECU inspections such as memory reads and device I/O controls via the ECU instead of spoofed
-CAN packets.
+and Engine Control Unit (ECU) inspections such as memory reads and device I/O controls via the ECU instead of spoofed
+Controller Area Network (CAN bus) packets.
 
 In addition, when developing uds-server, it showed several more uses.  When a dealership tool
 is known to uds-server, it makes it very easy to see what the tool is attempting to do by spoofing
@@ -16,21 +16,21 @@ a real target vehicle.  This allows you to quickly reverse commands from dealers
 see only the packets that matter.  Another nice feature, is the ability to fuzz the
 dealership/scantools to see if they are doing proper input validation checks.  This enables
 uds-server to work as a security tool by playing the role of a modified "malicious" vehicle and
-seeing how the shops tools handle the malformed requests.
+seeing how the shop's tools handle the malformed requests.
 
 
 Compiling uds-server
 ====================
 
-Right now the tool was developed on Ubuntu Linux but is simple enough it should compile on
-any standard Linux system.  Simply type 'make'
+Right now the tool was developed on Ubuntu Linux but is simple enough that it should compile on
+any standard Linux system.  Simply type 'make':
 
 ```
 $ make
 cc     uds-server.c   -o uds-server
 ```
 
-This version is still very alpha but the help screen should look something like:
+This version is still considered 'alpha' but the help screen should look something like:
 
 ```
 Simulates UDS responses
@@ -50,7 +50,7 @@ Running uds-server for testing
 ==============================
 
 If you are running uds-server along with ICSim then simply start another terminal window and
-run:
+run:d
 
 ```
 $ uds-server vcan0
@@ -68,7 +68,7 @@ ODB GW
 ======
 
 The ODB Gateway (ODB GW) is a tribute to Ol' Dirty Bastard (RIP) and the mispronunciation 
-of OBD ports.  It is a simple device that you can easily build yourself:
+of OBD (On-board diagnostics) ports.  It is a simple device that you can easily build yourself:
 
 * 2 x Female J1962 OBD-II Ports (~$10/ea)
 * Project Box (~$5)
@@ -167,23 +167,24 @@ $ uds-server -v -z can0
 Using CAN interface can0
 Fuzz level set to: 1
 ```
-This will do things like randomize the VIN and some DTC messages.
+This will do things like randomize the Vehicle Identification Number (VIN) and some Diagnostic 
+Trouble Code (DTC) messages.
 
 ```
 $ uds-server -v -zzzz can0
 Using CAN interface can0
 Fuzz level set to: 4
 ```
-This will do things like send WAY to many DTCs (think hundreds) or create HUGE VINs that
-also include binary data.  VIN contain an internal checksum that uds-server will automatically
-calculate correctly for fuzzing.  If you want to specify a vin you can do so via the command
+This will do things like send WAY too many DTCs (think hundreds) or create HUGE VINs that
+also include binary data.  A VIN contains an internal checksum that uds-server will automatically
+calculate correctly for fuzzing.  If you want to specify a VIN you can do so via the command
 line:
 
 ```
 $ uds-server -v -V "PWN3D OP3N G4R4G3" can0
 ```
 
-This will report the vehicles VIN as "PWN3D OP3N G4R4G3" which btw is a "valid" VIN based on the
+This will report the vehicles VIN as "PWN3D OP3N G4R4G3" which by the way is a "valid" VIN based on the
 checksum byte.  Some tools use VIN as the lookup for what type of vehicle it is working with, so
 specifying a valid one for your target vehicle can be useful.
 
