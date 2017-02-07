@@ -72,7 +72,7 @@ of OBD (On-board diagnostics) ports.  It is a simple device that you can easily 
 
 * 2 x Female J1962 OBD-II Ports (~$10/ea)
 * Project Box (~$5)
-* at least 2 120 Ohm Resistors (or 1 240 Ohm) (pennies)
+* 1x 120 Ohm Resistor
 * 12 V Power Supply (~12)
 * Some wires and maybe banana plug connectors
 
@@ -82,7 +82,7 @@ The minimum wiring is as follows:
 * Connect pins 4 and 5 together for ground and splice a line to the 12V supply
 * Connect pin 6 together for CAN High
 * Connect pin 14 together for CAN Low
-* Add 240 Ohm resistance across CAN High and Low
+* Add 120 Ohm resistance across CAN High and Low
 
 You can bridge more pins but how they are wired depends on what type of vehicle scanner you
 are testing.  For instance, several vehicles have many different CAN buses on the other
