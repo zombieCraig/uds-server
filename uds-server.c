@@ -634,7 +634,7 @@ void handle_dsc(int can, struct canfd_frame frame) {
 void handle_read_data_by_id(int can, struct canfd_frame frame) {
   if(verbose) plog("Recieved Read Data by ID %02X %02X\n", frame.data[2], frame.data[3]);
   char resp[120];
-  if(frame.data[2] = 0xF1) {
+  if(frame.data[2] == 0xF1) {
     switch(frame.data[3]) {
      case 0x87:
        if(verbose) plog("Read data by ID 0x87\n");
@@ -1046,7 +1046,7 @@ void handle_vcds_710(int can, struct canfd_frame frame) {
       write(can, &frame, CAN_MTU);
       break;
     case 0x22: // Read Data By Identifier
-      if(frame.data[2] = 0xF1) {
+      if(frame.data[2] == 0xF1) {
         switch(frame.data[3]) {
         case 0x87: // VAG Number
           if(verbose) plog("Read data by ID 0x87\n");
