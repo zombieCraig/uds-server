@@ -78,7 +78,7 @@ of OBD (On-board diagnostics) ports.  It is a simple device that you can easily 
 
 The minimum wiring is as follows:
 
-* Connect pin 12 together for power and splice a line to the 12V supply
+* Connect pin 16 together for power and splice a line to the 12V supply
 * Connect pins 4 and 5 together for ground and splice a line to the 12V supply
 * Connect pin 6 together for CAN High
 * Connect pin 14 together for CAN Low
