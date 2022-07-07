@@ -1027,7 +1027,7 @@ void handle_vcds_710(int can, struct canfd_frame frame) {
   if(verbose) plog("Received VCDS 0x710 gateway request\n");
   char resp[150];
   if(frame.data[0] == 0x30) { // Flow control
-    flow_control_push(can);
+    flow_control_push_to(can,0x77A);
     return;
   }
   switch(frame.data[1]) {
