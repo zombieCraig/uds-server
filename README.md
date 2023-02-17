@@ -2,7 +2,7 @@ UDS Server
 ==========
 
 Unified Diagnostic Services (UDS) Server - is a ECU simulator that provides UDS support.
-This application was originally written to go alongside of [ICSim] (https://github.com/zombieCraig/ICSim)
+This application was originally written to go alongside of [ICSim](https://github.com/zombieCraig/ICSim)
 for training.
 
 Running both ICSim and uds-server can give students a more realistic use of tools.  You can use
@@ -56,7 +56,7 @@ run:d
 $ uds-server vcan0
 ```
 
-Then you can practice commands to get VIN or use things like [CaringCaribou] (https://github.com/CaringCaribou/caringcaribou) to brute force or identify diagnostic services.
+Then you can practice commands to get VIN or use things like [CaringCaribou](https://github.com/CaringCaribou/caringcaribou) to brute force or identify diagnostic services.
 
 If you ware working with a dealership tool or a scan tool then you will use the real can0 interface
 instead.  You will need a small CAN network to bridge the dealership/scantool with your CAN
