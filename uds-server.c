@@ -12,6 +12,7 @@
 #include <signal.h>
 #include <getopt.h>
 #include <time.h>
+#include <sys/time.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
